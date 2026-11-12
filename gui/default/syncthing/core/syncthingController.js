@@ -682,7 +682,8 @@ angular.module('syncthing.core')
             // This function should match IsAuthEnabled() in guiconfiguration.go
             var guiCfg = $scope.config && $scope.config.gui;
             if (guiCfg) {
-                return guiCfg.authMode === 'ldap' || (guiCfg.user && guiCfg.password);
+                return guiCfg.authMode === 'ldap' || (guiCfg.user && guiCfg.password)
+                    || (guiCfg.proxyAuth && (guiCfg.proxyAuth.mode === 'header' || guiCfg.proxyAuth.mode === 'jwt'));
             }
             return false;
         };

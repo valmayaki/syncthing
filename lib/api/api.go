@@ -370,8 +370,12 @@ func (s *service) Serve(ctx context.Context) error {
 
 	// Wrap everything in basic auth, if user/password is set.
 	if guiCfg.IsAuthEnabled() {
+		proxyAuth, err := newProxyAuthenticator(guiCfg.ProxyAuth)
+		if err != nil {
+			return fmt.Errorf("invalid GUI proxy authentication: %w", err)
+		}
 		tokenCookieManager := newTokenCookieManager(s.id.Short().String(), guiCfg, s.evLogger, s.miscDB)
-		authMW := newBasicAuthAndSessionMiddleware(tokenCookieManager, guiCfg, s.cfg.LDAP(), handler, s.evLogger)
+		authMW := newBasicAuthAndSessionMiddleware(tokenCookieManager, proxyAuth, guiCfg, s.cfg.LDAP(), handler, s.evLogger)
 		handler = authMW
 
 		restMux.Handler(http.MethodPost, "/rest/noauth/auth/password", http.HandlerFunc(authMW.passwordAuthHandler))

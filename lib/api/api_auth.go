@@ -126,15 +126,17 @@ func isNoAuthPath(path string, metricsWithoutAuth bool) bool {
 
 type basicAuthAndSessionMiddleware struct {
 	tokenCookieManager *tokenCookieManager
+	proxyAuth          *proxyAuthenticator
 	guiCfg             config.GUIConfiguration
 	ldapCfg            config.LDAPConfiguration
 	next               http.Handler
 	evLogger           events.Logger
 }
 
-func newBasicAuthAndSessionMiddleware(tokenCookieManager *tokenCookieManager, guiCfg config.GUIConfiguration, ldapCfg config.LDAPConfiguration, next http.Handler, evLogger events.Logger) *basicAuthAndSessionMiddleware {
+func newBasicAuthAndSessionMiddleware(tokenCookieManager *tokenCookieManager, proxyAuth *proxyAuthenticator, guiCfg config.GUIConfiguration, ldapCfg config.LDAPConfiguration, next http.Handler, evLogger events.Logger) *basicAuthAndSessionMiddleware {
 	return &basicAuthAndSessionMiddleware{
 		tokenCookieManager: tokenCookieManager,
+		proxyAuth:          proxyAuth,
 		guiCfg:             guiCfg,
 		ldapCfg:            ldapCfg,
 		next:               next,
@@ -146,6 +148,18 @@ func (m *basicAuthAndSessionMiddleware) ServeHTTP(w http.ResponseWriter, r *http
 	if hasValidAPIKeyHeader(r, m.guiCfg) {
 		m.next.ServeHTTP(w, r)
 		return
+	}
+	if m.proxyAuth != nil {
+		username, ok, err := m.proxyAuth.authenticate(r)
+		if err != nil {
+			forbidden(w)
+			return
+		}
+		if ok {
+			m.tokenCookieManager.createSession(username, false, w, r)
+			m.next.ServeHTTP(w, r)
+			return
+		}
 	}
 
 	if m.tokenCookieManager.hasValidSession(r) {

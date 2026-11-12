@@ -19,27 +19,77 @@ import (
 )
 
 type GUIConfiguration struct {
-	Enabled                   bool     `json:"enabled" xml:"enabled,attr" default:"true"`
-	RawAddress                string   `json:"address" xml:"address" default:"127.0.0.1:8384"`
-	RawUnixSocketPermissions  string   `json:"unixSocketPermissions" xml:"unixSocketPermissions,omitempty"`
-	User                      string   `json:"user" xml:"user,omitempty"`
-	Password                  string   `json:"password" xml:"password,omitempty"`
-	AuthMode                  AuthMode `json:"authMode" xml:"authMode,omitempty"`
-	MetricsWithoutAuth        bool     `json:"metricsWithoutAuth" xml:"metricsWithoutAuth" default:"false"`
-	RawUseTLS                 bool     `json:"useTLS" xml:"tls,attr"`
-	APIKey                    string   `json:"apiKey" xml:"apikey,omitempty"`
-	InsecureAdminAccess       bool     `json:"insecureAdminAccess" xml:"insecureAdminAccess,omitempty"`
-	Theme                     string   `json:"theme" xml:"theme" default:"default"`
-	InsecureSkipHostCheck     bool     `json:"insecureSkipHostcheck" xml:"insecureSkipHostcheck,omitempty"`
-	InsecureAllowFrameLoading bool     `json:"insecureAllowFrameLoading" xml:"insecureAllowFrameLoading,omitempty"`
-	SendBasicAuthPrompt       bool     `json:"sendBasicAuthPrompt" xml:"sendBasicAuthPrompt,attr"`
-	SessionCookieDurationS    int      `json:"sessionCookieDurationS" xml:"sessionCookieDurationS,omitempty" default:"604800"`
-	SessionCookiePath         string   `json:"sessionCookiePath" xml:"sessionCookiePath,omitempty" default:"/"`
+	Enabled                   bool                      `json:"enabled" xml:"enabled,attr" default:"true"`
+	RawAddress                string                    `json:"address" xml:"address" default:"127.0.0.1:8384"`
+	RawUnixSocketPermissions  string                    `json:"unixSocketPermissions" xml:"unixSocketPermissions,omitempty"`
+	User                      string                    `json:"user" xml:"user,omitempty"`
+	Password                  string                    `json:"password" xml:"password,omitempty"`
+	AuthMode                  AuthMode                  `json:"authMode" xml:"authMode,omitempty"`
+	MetricsWithoutAuth        bool                      `json:"metricsWithoutAuth" xml:"metricsWithoutAuth" default:"false"`
+	RawUseTLS                 bool                      `json:"useTLS" xml:"tls,attr"`
+	APIKey                    string                    `json:"apiKey" xml:"apikey,omitempty"`
+	InsecureAdminAccess       bool                      `json:"insecureAdminAccess" xml:"insecureAdminAccess,omitempty"`
+	Theme                     string                    `json:"theme" xml:"theme" default:"default"`
+	InsecureSkipHostCheck     bool                      `json:"insecureSkipHostcheck" xml:"insecureSkipHostcheck,omitempty"`
+	InsecureAllowFrameLoading bool                      `json:"insecureAllowFrameLoading" xml:"insecureAllowFrameLoading,omitempty"`
+	SendBasicAuthPrompt       bool                      `json:"sendBasicAuthPrompt" xml:"sendBasicAuthPrompt,attr"`
+	SessionCookieDurationS    int                       `json:"sessionCookieDurationS" xml:"sessionCookieDurationS,omitempty" default:"604800"`
+	SessionCookiePath         string                    `json:"sessionCookiePath" xml:"sessionCookiePath,omitempty" default:"/"`
+	ProxyAuth                 GUIProxyAuthConfiguration `json:"proxyAuth" xml:"proxyAuth"`
+}
+
+// Proxy authentication modes. With ProxyAuthModeHeader the GUI trusts a
+// username header set by a reverse proxy at a trusted address. With
+// ProxyAuthModeJWT it verifies a signed JWT (for example authentik's
+// X-Authentik-Jwt) against a JWKS and takes the username from a claim.
+const (
+	ProxyAuthModeOff    = ""
+	ProxyAuthModeHeader = "header"
+	ProxyAuthModeJWT    = "jwt"
+)
+
+// GUIProxyAuthConfiguration lets a reverse proxy that already authenticated
+// the user sign them in to the GUI. All fields are strings or integers so
+// GUIConfiguration stays comparable; lists are comma separated.
+type GUIProxyAuthConfiguration struct {
+	Mode string `json:"mode" xml:"mode,omitempty"`
+	// Comma-separated IPs or CIDRs the proxy connects from. Required in
+	// header mode; optional extra restriction in JWT mode.
+	TrustedProxies string `json:"trustedProxies" xml:"trustedProxies,omitempty"`
+	// Header with the username. In JWT mode it is optional and, when the
+	// request carries it, must equal the username claim.
+	UserHeader string `json:"userHeader" xml:"userHeader,omitempty" default:"Remote-User"`
+	// Comma-separated usernames allowed in. Empty allows any user the
+	// proxy authenticated.
+	AllowedUsers string `json:"allowedUsers" xml:"allowedUsers,omitempty"`
+	// JWT mode settings.
+	JWTHeader     string `json:"jwtHeader" xml:"jwtHeader,omitempty" default:"X-Authentik-Jwt"`
+	JWKSURL       string `json:"jwksURL" xml:"jwksURL,omitempty"`
+	Issuer        string `json:"issuer" xml:"issuer,omitempty"`
+	Audience      string `json:"audience" xml:"audience,omitempty"`
+	UsernameClaim string `json:"usernameClaim" xml:"usernameClaim,omitempty" default:"preferred_username"`
+	LeewayS       int    `json:"leewayS" xml:"leewayS,omitempty" default:"30"`
+}
+
+// Enabled reports whether a proxy authentication mode is configured.
+func (c GUIProxyAuthConfiguration) Enabled() bool {
+	return c.Mode == ProxyAuthModeHeader || c.Mode == ProxyAuthModeJWT
+}
+
+// SplitList splits a comma-separated configuration value, dropping blanks.
+func SplitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func (c GUIConfiguration) IsAuthEnabled() bool {
 	// This function should match isAuthEnabled() in syncthingController.js
-	return c.AuthMode == AuthModeLDAP || (len(c.User) > 0 && len(c.Password) > 0)
+	return c.AuthMode == AuthModeLDAP || (len(c.User) > 0 && len(c.Password) > 0) || c.ProxyAuth.Enabled()
 }
 
 func (GUIConfiguration) IsOverridden() bool {
