@@ -156,7 +156,10 @@ func (m *basicAuthAndSessionMiddleware) ServeHTTP(w http.ResponseWriter, r *http
 			return
 		}
 		if ok {
-			m.tokenCookieManager.createSession(username, false, w, r)
+			// The proxy identity is verified on every request, so no session
+			// is created: one per request would churn the session store, and
+			// a cookie would outlive the proxy's own login.
+			slog.Debug("GUI request authenticated by reverse proxy", slog.String("username", username))
 			m.next.ServeHTTP(w, r)
 			return
 		}
